@@ -1,0 +1,38 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Rise Track</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      margin: 0;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 18px;
+    }
+    #status {
+      margin-top: 20px;
+      font-size: 16px;
+      color: #333;
+    }
+  </style>
+  <script src="../alarm.js"></script>
+</head>
+<body>
+  <h1>Smart Alarm</h1>
+  <label for="wakeTime">Desired Wake Time:</label>
+  <input type="time" id="wakeTime" required>
+  <button id="stopButton">I'm Awake!</button>
+  <div id="status">Alarm not started.</div>
+
+  <script defer src=index.js></script>
+</body>
+</html>
