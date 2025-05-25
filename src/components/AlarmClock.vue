@@ -4,6 +4,9 @@
       <div class="current-time">{{ currentTime }}</div>
       <div class="alarm-time" v-if="alarmTime">
         闹钟时间: {{ alarmTime }}
+        <span v-if="aiOffset > 0" class="ai-offset">
+          (AI 建议提前 {{ aiOffset }} 分钟)
+        </span>
       </div>
     </div>
     
@@ -39,6 +42,8 @@ const currentTime = ref('')
 const selectedTime = ref('')
 const alarmTime = ref('')
 const isAlarmActive = ref(false)
+const showHistory = ref(false)
+const aiOffset = ref(0) // AI 建议的偏移时间（分钟）
 let timer: number | null = null
 let alarmAudio: HTMLAudioElement | null = null
 let historyListRef = ref<InstanceType<typeof HistoryList> | null>(null)
@@ -106,6 +111,82 @@ const addToHistory = () => {
   alarmStartTime = null
 }
 
+const analyzeAndAdjustAlarm = async () => {
+  try {
+    // 获取最近7天的数据
+    const now = new Date()
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+    
+    const stored = localStorage.getItem('alarmHistory')
+    if (!stored) return
+    
+    const history = JSON.parse(stored)
+    const recentRecords = history.filter((record: any) => {
+      const recordDate = new Date(record.date)
+      return recordDate >= sevenDaysAgo
+    })
+
+    if (recentRecords.length === 0) return
+
+    // 准备发送给 OpenAI 的数据
+    const analysisData = {
+      records: recentRecords.map((record: any) => ({
+        date: new Date(record.date).toLocaleDateString('zh-CN'),
+        time: record.time,
+        snoozeTime: record.snoozeTime
+      }))
+    }
+
+    // 调用 OpenAI API 获取建议
+    const response = await fetch('https://api.siliconflow.cn/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer sk-zpccrwrvzrwlbrltwtumawdxpyhtekmfkrxpfidlvovsbxwn'
+      },
+      body: JSON.stringify({
+        model: "Qwen/Qwen3-8B",
+        messages: [
+          {
+            role: "system",
+            content: "你是一个专业的睡眠分析助手。请分析用户的起床记录，并给出一个建议的闹钟提前时间（以分钟为单位）。只需要返回一个数字，不要其他文字。例如：15"
+          },
+          {
+            role: "user",
+            content: `请分析以下最近7天的起床记录数据，并给出建议的闹钟提前时间：${JSON.stringify(analysisData, null, 2)}`
+          }
+        ]
+      })
+    })
+
+    const data = await response.json()
+    const suggestedOffset = parseInt(data.choices[0].message.content)
+    
+    if (!isNaN(suggestedOffset)) {
+      aiOffset.value = suggestedOffset
+      // 如果当前有闹钟设置，则应用偏移
+      if (selectedTime.value) {
+        const [hours, minutes] = selectedTime.value.split(':')
+        const date = new Date()
+        date.setHours(parseInt(hours))
+        date.setMinutes(parseInt(minutes) - suggestedOffset)
+        
+        // 格式化新的时间
+        const newHours = date.getHours().toString().padStart(2, '0')
+        const newMinutes = date.getMinutes().toString().padStart(2, '0')
+        selectedTime.value = `${newHours}:${newMinutes}`
+        
+        // 如果闹钟已设置，更新闹钟时间
+        if (alarmTime.value) {
+          alarmTime.value = selectedTime.value
+        }
+      }
+    }
+  } catch (error) {
+    console.error('AI 分析失败:', error)
+  }
+}
+
 const stopAlarm = () => {
   if (alarmAudio) {
     alarmAudio.pause()
@@ -114,6 +195,7 @@ const stopAlarm = () => {
   isAlarmActive.value = false
   alarmTime.value = ''
   addToHistory()
+  analyzeAndAdjustAlarm() // 添加 AI 分析
 }
 
 const checkAlarm = () => {
@@ -293,5 +375,12 @@ onUnmounted(() => {
   100% {
     transform: scale(1);
   }
+}
+
+.ai-offset {
+  font-size: 0.8em;
+  color: #4CAF50;
+  margin-left: 10px;
+  opacity: 0.8;
 }
 </style> 
